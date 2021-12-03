@@ -27,41 +27,60 @@ void hb_task( void *parameters )
     }
 }
 
-static packet_t txp;
-static packet_t rxp;
+static routed_packet_t txp;
+static routed_packet_t rxp;
 
 void test_task( void *parameters )
 {
   uint8_t len;
   uint8_t count;
-  
 
-  printf("Starting test task!\n");
   while (1) {
-    com_read(&rxp);
-    switch (rxp.data[0]) {
-      case 0:
-        // Sink, do nothing
-        break;
-      case 1:
-        // echo
-        com_write(&rxp);
-        break;
-      case 2:
-        // Source
-        len = rxp.data[2];
-        count = rxp.data[1];
-        txp.len = len;
+    com_read((packet_t*) &rxp);
+    if (rxp.dst == 0x22) {// Test
+      printf("Received test request from ");
+      switch(rxp.src >> 4) {
+        case 0x0: printf(" STM32\n"); break;
+        case 0x1: printf(" ESP32\n"); break;
+        default: printf(" UNKNOWN\n"); break;
+      }
 
-        printf("Source: Sending %u packets of size %u\n", count, len);
+      printf("Run test: ");
+      switch (rxp.data[0]) {
+        case 0:
+          // Sink, do nothing
+          printf("sink\n");
+          break;
+        case 1:
+          // echo
+          printf("echo\n");
+          memcpy(&txp, &rxp, rxp.len + 4);
+          txp.src = rxp.dst;
+          txp.dst = rxp.src;
+          com_write((packet_t*) &txp);
+          break;
+        case 2:
+          // Source
+          len = rxp.data[2];
+          count = rxp.data[1];
+          txp.len = len;
+          txp.src = rxp.dst;
+          txp.dst = rxp.src;
 
-        for (int i = 0; i < count; i++) {
-          for (int j = 0; j < len; j++) {
-            txp.data[j] = j;
+          printf("source %u packets of size %u\n", count, len);
+
+          for (int i = 0; i < count; i++) {
+            for (int j = 0; j < len; j++) {
+              txp.data[j] = j;
+            }
+            com_write((packet_t*) &txp);
           }
-          com_write(&txp);
-        }
-        break;
+          break;
+        default:
+          printf(" unknown!\n");
+      }
+    } else {
+      printf("Received packet not for test!\n");
     }
   }
 }
@@ -79,6 +98,9 @@ void start_bootloader(void)
     printf("[UART] open failed !\n");
     pmsis_exit(-1);
   }
+
+    printf("\nBootloader is starting up...with 4.7.0!\n");
+    printf("FC at %u MHz\n", pi_freq_get(PI_FREQ_DOMAIN_FC)/1000000);
 
     printf("Starting up tasks...\n");
 
@@ -118,6 +140,6 @@ int main(void)
   pi_freq_set(PI_FREQ_DOMAIN_FC, 250000000);
   pi_pmu_voltage_set(PI_PMU_DOMAIN_FC, 1200);
 
-  printf("\n\tGAP8 bootloader\n\n");
+  //printf("\n\tGAP8 bootloader\n\n");
   return pmsis_kickoff((void *)start_bootloader);
 }

@@ -13,8 +13,8 @@
 #if 0
 #define DEBUG_PRINTF printf
 #else
-#define DEBUG_DEBUG_PRINTF(...) ((void) 0)
-#endif  /* DEBUG */
+#define DEBUG_PRINTF(...) ((void) 0)
+#endif /* DEBUG */
 
 // Nina RTT (goes high when Nina is ready to talk)
 #define CONFIG_NINA_GPIO_NINA_ACK 18
@@ -136,7 +136,7 @@ void com_task(void *parameters)
                                   pdTRUE, // Clear bits before returning
                                   pdFALSE, // Wait for any bit
                                   portMAX_DELAY);
-      //DEBUG_PRINTF("Unlocked\n");
+      DEBUG_PRINTF("Unlocked\n");
     } else {
       // If we didn't unlock on the bits, then reset them
       evBits = 0;
@@ -171,7 +171,7 @@ void com_task(void *parameters)
         DEBUG_PRINTF("Nina RTT already high\n");
       }
     }
-
+    memset(rx_buff, 0x01, sizeof(packet_t));
     // There's a risk that we've been emptying the queue while another package has been
     // pushed and set the event bit again, which will trigger this loop again.
     // To avoid one extra read (that's not needed) double check here.
@@ -187,7 +187,7 @@ void com_task(void *parameters)
       int tx_len = ((packet_t *)tx_buff)->len;
       int rx_len = ((packet_t *)rx_buff)->len;
 
-      DEBUG_PRINTF("Read %i bytes\n", ((packet_t *)rx_buff)->len);
+      DEBUG_PRINTF("Read %i bytes\n", rx_len);
 
       int sizeLeft = max(tx_len - INITIAL_TRANSFER_SIZE + 2, rx_len - INITIAL_TRANSFER_SIZE + 2);
 
@@ -251,7 +251,7 @@ void com_init()
   evGroup = xEventGroupCreate();
 
   BaseType_t xTask;
-  xTask = xTaskCreate(com_task, "com_task", configMINIMAL_STACK_SIZE * 4,
+  xTask = xTaskCreate(com_task, "com_task", configMINIMAL_STACK_SIZE * 6,
                       NULL, tskIDLE_PRIORITY + 1, NULL);
   if (xTask != pdPASS)
   {
@@ -269,6 +269,8 @@ void com_read(packet_t *p)
 
 void com_write(packet_t *p)
 {
+  //printf("Will queue up packet\n");
   xQueueSend(txq, p, (TickType_t)portMAX_DELAY);
+  //printf("Have queued up packet!\n");
   xEventGroupSetBits(evGroup, TX_QUEUE_BIT);
 }
