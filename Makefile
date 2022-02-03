@@ -1,7 +1,7 @@
 io=uart
 
 APP = bootloader
-APP_SRCS += src/main.c src/com.c
+APP_SRCS += src/main.c src/com.c src/cpx.c src/bl.c src/flash.c
 
 export GAP_USE_OPENOCD=1
 

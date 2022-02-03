@@ -39,8 +39,9 @@ static pi_device_t spi_dev, nina_rtt_dev, gap8_rtt_dev;
 static QueueHandle_t txq = NULL;
 static QueueHandle_t rxq = NULL;
 
-#define TXQ_SIZE (1)
-#define RXQ_SIZE (1)
+// To optimize sending the queue should fit at least one image
+#define TXQ_SIZE (80)
+#define RXQ_SIZE (5)
 
 static EventGroupHandle_t evGroup;
 #define NINA_RTT_BIT (1 << 0)
@@ -68,7 +69,7 @@ static void setup_nina_rtt_pin(pi_device_t *device)
   // Set up interrupt
   uint32_t gpio_mask = (1 << (CONFIG_NINA_GPIO_NINA_ACK & PI_GPIO_NUM_MASK));                   // create pin mask
   pi_gpio_callback_init(&cb_gpio, gpio_mask, vDataReadyISR, (void *)CONFIG_NINA_GPIO_NINA_ACK); // setup callback and handler
-  pi_gpio_callback_add(device, &cb_gpio);                                                       // Attach callback to gpio pin
+  pi_gpio_callback_add(device, &cb_gpio);                                                   // Attach callback to gpio pin
 }
 
 static void setup_gap8_rtt_pin(pi_device_t *device)
@@ -114,6 +115,9 @@ static void init_spi(pi_device_t *device)
   }
 }
 
+static uint32_t start;
+static uint32_t end;
+
 void com_task(void *parameters)
 {
   EventBits_t evBits;
@@ -121,6 +125,15 @@ void com_task(void *parameters)
 
   rx_buff = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(packet_t));
   tx_buff = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(packet_t));
+
+  if (rx_buff == 0) {
+    DEBUG_PRINTF("Could not allocate RX buffer\n");
+  }
+
+  if (tx_buff == 0) {
+    DEBUG_PRINTF("Could not allocate TX buffer\n");
+  }
+
 
   DEBUG_PRINTF("Starting com task\n");
 
@@ -137,8 +150,10 @@ void com_task(void *parameters)
                                   pdFALSE, // Wait for any bit
                                   portMAX_DELAY);
       DEBUG_PRINTF("Unlocked\n");
+      start = xTaskGetTickCount();
     } else {
       // If we didn't unlock on the bits, then reset them
+      start = xTaskGetTickCount();
       evBits = 0;
       DEBUG_PRINTF("Still has stuff to send\n");
     }
@@ -171,7 +186,7 @@ void com_task(void *parameters)
         DEBUG_PRINTF("Nina RTT already high\n");
       }
     }
-    memset(rx_buff, 0x01, sizeof(packet_t));
+    //memset(rx_buff, 0x01, sizeof(packet_t));
     // There's a risk that we've been emptying the queue while another package has been
     // pushed and set the event bit again, which will trigger this loop again.
     // To avoid one extra read (that's not needed) double check here.
@@ -187,11 +202,11 @@ void com_task(void *parameters)
       int tx_len = ((packet_t *)tx_buff)->len;
       int rx_len = ((packet_t *)rx_buff)->len;
 
-      DEBUG_PRINTF("Read %i bytes\n", rx_len);
+      DEBUG_PRINTF("Should read %i bytes\n", rx_len);
 
       int sizeLeft = max(tx_len - INITIAL_TRANSFER_SIZE + 2, rx_len - INITIAL_TRANSFER_SIZE + 2);
 
-      DEBUG_PRINTF("Size left is %i\n", sizeLeft);
+      DEBUG_PRINTF("Transfer size left is %i\n", sizeLeft);
 
       // Set minumum size left, this works with 0 bytes as well
       sizeLeft = max(0, sizeLeft);
@@ -269,6 +284,7 @@ void com_read(packet_t *p)
 
 void com_write(packet_t *p)
 {
+  start = xTaskGetTickCount();
   //printf("Will queue up packet\n");
   xQueueSend(txq, p, (TickType_t)portMAX_DELAY);
   //printf("Have queued up packet!\n");

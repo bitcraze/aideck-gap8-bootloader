@@ -4,6 +4,13 @@
 #include "pmsis.h"
 
 #include "com.h"
+#include "cpx.h"
+#include "bl.h"
+#include "flash.h"
+
+#include "wifi.h"
+#include "wifi_credentials.h"
+
 
 #define LED_PIN 2
 
@@ -17,7 +24,7 @@ void hb_task( void *parameters )
     // Initialize the LED pin
     pi_gpio_pin_configure(&led_gpio_dev, LED_PIN, PI_GPIO_OUTPUT);
 
-    const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
+    const TickType_t xDelay = 100 / portTICK_PERIOD_MS;
 
     while (1) {
       pi_gpio_pin_write(&led_gpio_dev, LED_PIN, 1);
@@ -27,60 +34,89 @@ void hb_task( void *parameters )
     }
 }
 
-static routed_packet_t txp;
-static routed_packet_t rxp;
+// These must be in L2 for uDMA to work
+static CPXPacket_t * txp;
+static CPXPacket_t * rxp;
 
-void test_task( void *parameters )
+void setup_wifi(void) {
+  printf("Sending wifi info...\n");
+  txp->route.destination = ESP32;
+  txp->route.source = GAP8;
+  txp->route.function = WIFI_CTRL;
+
+  WiFiCTRLPacket_t * wifiCtrl = (WiFiCTRLPacket_t*) txp->data;
+  wifiCtrl->cmd = SET_SSID;
+  memcpy(wifiCtrl->data, ssid, sizeof(ssid));
+  cpxSendPacketBlocking(txp, sizeof(ssid) + 1);
+
+  wifiCtrl->cmd = SET_KEY;
+  memcpy(wifiCtrl->data, passwd, sizeof(passwd));
+  cpxSendPacketBlocking(txp, sizeof(passwd) + 1);
+
+  wifiCtrl->cmd = WIFI_CONNECT;
+  cpxSendPacketBlocking(txp, sizeof(WiFiCTRLPacket_t));
+}
+
+void bl_task( void *parameters )
 {
   uint8_t len;
   uint8_t count;
 
+  vTaskDelay(1000);
+
+  setup_wifi();
+
   while (1) {
-    com_read((packet_t*) &rxp);
-    if (rxp.dst == 0x22) {// Test
-      printf("Received test request from ");
-      switch(rxp.src >> 4) {
-        case 0x0: printf(" STM32\n"); break;
-        case 0x1: printf(" ESP32\n"); break;
-        default: printf(" UNKNOWN\n"); break;
+    uint32_t size = cpxReceivePacketBlocking(rxp);
+    
+    printf(">> 0x%02X->0x%02X (0x%02X) (size=%u)\n", rxp->route.source, rxp->route.destination, rxp->route.function, size);
+    if (rxp->route.function == BOOTLOADER) {
+      BLPacket_t * blpRx = (BLPacket_t*) rxp->data;
+      BLPacket_t * blpTx = (BLPacket_t*) txp->data;
+
+      printf("Received command [0x%02X] for bootloader\n", blpRx->cmd);
+
+      uint16_t replySize = 0;
+
+      // Fix the header of the outgoing answer
+      txp->route.source = GAP8;
+      txp->route.destination = rxp->route.source;
+      txp->route.function = BOOTLOADER;
+
+      switch(blpRx->cmd) {
+        case BL_CMD_VERSION:
+          replySize = bl_handleVersionCommand((VersionOut_t*) blpTx->data);
+          break;
+        case BL_CMD_READ:
+          bl_handleReadCommand( (ReadIn_t*) blpRx->data, txp);
+          break;
+        case BL_CMD_WRITE:
+          bl_handleWriteCommand( (ReadIn_t*) blpRx->data, rxp, txp);
+          break;          
+        case BL_CMD_MD5:
+          replySize = bl_handleMD5Command((ReadIn_t*) blpRx->data, blpTx->data);
+          break;          
+        default:
+          printf("Not handling bootloader command [0x%02X]\n", blpRx->cmd);
       }
 
-      printf("Run test: ");
-      switch (rxp.data[0]) {
-        case 0:
-          // Sink, do nothing
-          printf("sink\n");
-          break;
-        case 1:
-          // echo
-          printf("echo\n");
-          memcpy(&txp, &rxp, rxp.len + 4);
-          txp.src = rxp.dst;
-          txp.dst = rxp.src;
-          com_write((packet_t*) &txp);
-          break;
-        case 2:
-          // Source
-          len = rxp.data[2];
-          count = rxp.data[1];
-          txp.len = len;
-          txp.src = rxp.dst;
-          txp.dst = rxp.src;
+      if (replySize > 0) {
+        // Include command header byte
+        blpTx->cmd = blpRx->cmd;
+        replySize += sizeof(BLCommand_t);
 
-          printf("source %u packets of size %u\n", count, len);
 
-          for (int i = 0; i < count; i++) {
-            for (int j = 0; j < len; j++) {
-              txp.data[j] = j;
-            }
-            com_write((packet_t*) &txp);
-          }
-          break;
-        default:
-          printf(" unknown!\n");
+        cpxSendPacketBlocking(txp, replySize);
+      }
+      
+    } else if (rxp->route.function == WIFI_CTRL) {
+      if (rxp->data[0] == 0x31) {
+        printf("Wifi connected (%u.%u.%u.%u)\n", rxp->data[1], rxp->data[2], rxp->data[3], rxp->data[4]);
+      } else {
+        printf("Not handling WIFI_CTRL [0x%02X]\n", rxp->data[0]);
       }
     } else {
-      printf("Received packet not for test!\n");
+      printf("Not handling function [0x%02X]\n", rxp->route.function);
     }
   }
 }
@@ -95,12 +131,23 @@ void start_bootloader(void)
   pi_open_from_conf(&device, &conf);
   if (pi_uart_open(&device))
   {
-    printf("[UART] open failed !\n");
     pmsis_exit(-1);
   }
 
-    printf("\nBootloader is starting up...with 4.7.0!\n");
+    printf("\nBootloader is starting up...\n");
     printf("FC at %u MHz\n", pi_freq_get(PI_FREQ_DOMAIN_FC)/1000000);
+
+    flash_init();
+
+    // These must be in L2 for uDMA to work
+    txp = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(CPXPacket_t));
+    rxp = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(CPXPacket_t));
+
+    if (txp == NULL || rxp == NULL)
+    {
+      printf("Could not allocate txp and/or rxp, nothing to do now\n");
+      pmsis_exit(1);
+    }
 
     printf("Starting up tasks...\n");
 
@@ -116,11 +163,11 @@ void start_bootloader(void)
 
     com_init();
 
-    xTask = xTaskCreate( test_task, "test_task", configMINIMAL_STACK_SIZE * 4,
+    xTask = xTaskCreate( bl_task, "bootloader task", configMINIMAL_STACK_SIZE * 4,
                          NULL, tskIDLE_PRIORITY + 1, NULL );
     if( xTask != pdPASS )
     {
-        printf("Test task did not start !\n");
+        printf("Bootloader task did not start !\n");
         pmsis_exit(-1);
     }
 
@@ -133,12 +180,13 @@ void start_bootloader(void)
 int main(void)
 {
   // Initialize the PAD config (taken from BSP)
-  uint32_t pads_value[] = {0x00055500, 0x0f000000, 0x003fffff, 0x00000000};
-  pi_pad_init(pads_value);
+
+  pi_bsp_init();
+
 
   // Increase the FC freq to 250 MHz
-  pi_freq_set(PI_FREQ_DOMAIN_FC, 250000000);
-  pi_pmu_voltage_set(PI_PMU_DOMAIN_FC, 1200);
+  //pi_freq_set(PI_FREQ_DOMAIN_FC, 250000000);
+  //pi_pmu_voltage_set(PI_PMU_DOMAIN_FC, 1200);
 
   //printf("\n\tGAP8 bootloader\n\n");
   return pmsis_kickoff((void *)start_bootloader);
