@@ -1,3 +1,30 @@
+/**
+ * ,---------,       ____  _ __
+ * |  ,-^-,  |      / __ )(_) /_______________ _____  ___
+ * | (  O  ) |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
+ * | / ,--´  |    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
+ *    +------`   /_____/_/\__/\___/_/   \__,_/ /___/\___/
+ *
+ * AI-deck GAP8 second stage bootloader
+ *
+ * Copyright (C) 2022 Bitcraze AB
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, in version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ * main.c - AI-deck GAP8 second stage bootloader
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 
@@ -38,6 +65,8 @@ void hb_task( void *parameters )
 static CPXPacket_t * txp;
 static CPXPacket_t * rxp;
 
+extern void pi_bsp_init(void);
+
 void setup_wifi(void) {
   printf("Sending wifi info...\n");
   txp->route.destination = ESP32;
@@ -45,15 +74,15 @@ void setup_wifi(void) {
   txp->route.function = WIFI_CTRL;
 
   WiFiCTRLPacket_t * wifiCtrl = (WiFiCTRLPacket_t*) txp->data;
-  wifiCtrl->cmd = SET_SSID;
+  wifiCtrl->cmd = WIFI_CTRL_SET_SSID;
   memcpy(wifiCtrl->data, ssid, sizeof(ssid));
   cpxSendPacketBlocking(txp, sizeof(ssid) + 1);
 
-  wifiCtrl->cmd = SET_KEY;
+  wifiCtrl->cmd = WIFI_CTRL_SET_KEY;
   memcpy(wifiCtrl->data, passwd, sizeof(passwd));
   cpxSendPacketBlocking(txp, sizeof(passwd) + 1);
 
-  wifiCtrl->cmd = WIFI_CONNECT;
+  wifiCtrl->cmd = WIFI_CTRL_WIFI_CONNECT;
   cpxSendPacketBlocking(txp, sizeof(WiFiCTRLPacket_t));
 }
 
@@ -94,7 +123,7 @@ void bl_task( void *parameters )
           bl_handleWriteCommand( (ReadIn_t*) blpRx->data, rxp, txp);
           break;          
         case BL_CMD_MD5:
-          replySize = bl_handleMD5Command((ReadIn_t*) blpRx->data, blpTx->data);
+          replySize = bl_handleMD5Command((ReadIn_t*) blpRx->data, (MD5Out_t *) blpTx->data);
           break;          
         default:
           printf("Not handling bootloader command [0x%02X]\n", blpRx->cmd);
@@ -110,7 +139,7 @@ void bl_task( void *parameters )
       }
       
     } else if (rxp->route.function == WIFI_CTRL) {
-      if (rxp->data[0] == 0x31) {
+      if (rxp->data[0] == WIFI_CTRL_STATUS_WIFI_CONNECTED) {
         printf("Wifi connected (%u.%u.%u.%u)\n", rxp->data[1], rxp->data[2], rxp->data[3], rxp->data[4]);
       } else {
         printf("Not handling WIFI_CTRL [0x%02X]\n", rxp->data[0]);
@@ -140,8 +169,8 @@ void start_bootloader(void)
     flash_init();
 
     // These must be in L2 for uDMA to work
-    txp = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(CPXPacket_t));
-    rxp = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(CPXPacket_t));
+    txp = (CPXPacket_t *) pi_l2_malloc((uint32_t)sizeof(CPXPacket_t));
+    rxp = (CPXPacket_t *) pi_l2_malloc((uint32_t)sizeof(CPXPacket_t));
 
     if (txp == NULL || rxp == NULL)
     {
