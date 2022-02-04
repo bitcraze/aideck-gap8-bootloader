@@ -71,4 +71,5 @@ void bl_handleWriteCommand(ReadIn_t * info,  CPXPacket_t * rxp, CPXPacket_t * tx
 
 uint32_t bl_handleMD5Command(ReadIn_t * info, MD5Out_t * dataout);
 
+void bl_boot_to_application(void);
 #endif

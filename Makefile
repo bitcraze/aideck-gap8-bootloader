@@ -7,7 +7,10 @@ export GAP_USE_OPENOCD=1
 
 PMSIS_OS = freertos
 # Add functionality needed for FreeRTOS
-APP_CFLAGS += -DconfigUSE_TIMERS=1 -DINCLUDE_xTimerPendFunctionCall=1
+APP_CFLAGS += -DconfigUSE_TIMERS=1 -DINCLUDE_xTimerPendFunctionCall=1 -DCONFIG_NO_CLUSTER=1
+
+# Add linkerfile
+APP_LINK_SCRIPT=bootloader.ld
 
 # Add BSP support files
 BSP_SUPPORT = fs/host_fs/semihost.c fs/host_fs/host_fs.c

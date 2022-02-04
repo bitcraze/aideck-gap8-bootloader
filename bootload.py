@@ -223,7 +223,7 @@ version = bootloader.getVersion()
 
 print("GAP8 bootloader is version 0x{:02X}".format(version[0]))
 
-flashAppStart = 0x40080
+flashAppStart = 0x40000
 size = 16
 
 fw = bytearray()
