@@ -67,7 +67,7 @@ static QueueHandle_t txq = NULL;
 static QueueHandle_t rxq = NULL;
 
 // To optimize sending the queue should fit at least one image
-#define TXQ_SIZE (80)
+#define TXQ_SIZE (1)
 #define RXQ_SIZE (5)
 
 static EventGroupHandle_t evGroup;

@@ -38,15 +38,15 @@ ENTRY(reset_handler)
 
 MEMORY
 {
-  FC_tcdm           : ORIGIN = 0x1b001000, LENGTH = 0x00002000
+  FC_tcdm           : ORIGIN = 0x1b002000, LENGTH = 0x00001000
   fc_tcdm_aliased   : ORIGIN = 0x00000004, LENGTH = 0x00003ffc
-  L2                : ORIGIN = 0x1C040000, LENGTH = 0x00038000
+  L2                : ORIGIN = 0x1C060000, LENGTH = 0x00018000
   L1_sram           : ORIGIN = 0x10000000, LENGTH = 0x10000
 }
 
 /* Here are defined stack sizes for FC and cluster. */
-__STACK_FC_SIZE      = 0x1000;
-__STACK_IRQ_SIZE     = 0x400;
+__STACK_FC_SIZE      = 0x800;
+__STACK_IRQ_SIZE     = 0x250;
 
 /* We have to align each sector to word boundaries as our current s19->slm
  * conversion scripts are not able to handle non-word aligned sections. */

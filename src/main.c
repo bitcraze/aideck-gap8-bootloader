@@ -182,7 +182,7 @@ void start_bootloader(void)
 
     BaseType_t xTask;
 
-    xTask = xTaskCreate( hb_task, "hb_task", configMINIMAL_STACK_SIZE * 2,
+    xTask = xTaskCreate( hb_task, "hb_task", configMINIMAL_STACK_SIZE,
                          NULL, tskIDLE_PRIORITY + 1, NULL );
     if( xTask != pdPASS )
     {
@@ -192,7 +192,7 @@ void start_bootloader(void)
 
     com_init();
 
-    xTask = xTaskCreate( bl_task, "bootloader task", configMINIMAL_STACK_SIZE * 4,
+    xTask = xTaskCreate( bl_task, "bootloader task", configMINIMAL_STACK_SIZE * 3,
                          NULL, tskIDLE_PRIORITY + 1, NULL );
     if( xTask != pdPASS )
     {
