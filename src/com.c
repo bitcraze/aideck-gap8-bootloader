@@ -68,7 +68,7 @@ static QueueHandle_t rxq = NULL;
 
 // To optimize sending the queue should fit at least one image
 #define TXQ_SIZE (1)
-#define RXQ_SIZE (5)
+#define RXQ_SIZE (1)
 
 static EventGroupHandle_t evGroup;
 #define NINA_RTT_BIT (1 << 0)
@@ -145,23 +145,13 @@ static void init_spi(pi_device_t *device)
 static uint32_t start;
 static uint32_t end;
 
+static uint8_t rx_buff[sizeof(packet_t)];
+static uint8_t tx_buff[sizeof(packet_t)];
+
 void com_task(void *parameters)
 {
   EventBits_t evBits;
-  uint8_t *rx_buff, *tx_buff;
-
-  rx_buff = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(packet_t));
-  tx_buff = (uint8_t *)pmsis_l2_malloc((uint32_t)sizeof(packet_t));
-
-  if (rx_buff == 0) {
-    DEBUG_PRINTF("Could not allocate RX buffer\n");
-  }
-
-  if (tx_buff == 0) {
-    DEBUG_PRINTF("Could not allocate TX buffer\n");
-  }
-
-
+  
   DEBUG_PRINTF("Starting com task\n");
 
   while (1)
@@ -287,6 +277,7 @@ void com_init()
 
   if (txq == NULL || rxq == NULL)
   {
+    printf("Could not allocate txq and/or rxq in com\n");
     pmsis_exit(1);
   }
 

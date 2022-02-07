@@ -72,36 +72,32 @@ void bl_handleReadCommand(ReadIn_t * info,  CPXPacket_t * txp) {
   printf("Read completed\n");
 }
 
+static uint8_t buffer[SIZE_OF_MD5_BUFER];
+static MD5_CTX ctx;
+
 uint32_t bl_handleMD5Command(ReadIn_t * info, MD5Out_t * dataout) {
   uint32_t sizeLeft;
   uint32_t currentBaseAddress;
   uint32_t chunkSize;
-  uint8_t * buffer = (uint8_t *) pi_l2_malloc(SIZE_OF_MD5_BUFER);
-  MD5_CTX * ctx = (MD5_CTX *) pi_l2_malloc(sizeof(MD5_CTX));
-  if (buffer == NULL) {
-    // TODO: Should we return an error here?
-    printf("Could not malloc MD5 buffer\n");
-    pmsis_exit(1);
-  }
 
-  MD5_Init(ctx);
+  MD5_Init(&ctx);
 
   sizeLeft = info->size;
   currentBaseAddress = info->start;
   chunkSize = 0;
 
+  //printf("Calculating MD5 for %u bytes @ 0x%X\n", sizeLeft, currentBaseAddress);
+
   do {
     chunkSize = sizeLeft < SIZE_OF_MD5_BUFER ? sizeLeft : SIZE_OF_MD5_BUFER;
+    //printf("Inputting %u bytes @ 0x%X\n", chunkSize, currentBaseAddress);
     flash_read(currentBaseAddress, buffer, chunkSize);
-    MD5_Update(ctx, buffer, chunkSize);    
+    MD5_Update(&ctx, buffer, chunkSize);    
     currentBaseAddress += chunkSize;
     sizeLeft -= chunkSize;
   } while (sizeLeft > 0);
 
-  MD5_Final(dataout->md5, ctx);
-
-  pi_l2_free(buffer, SIZE_OF_MD5_BUFER);
-  pi_l2_free(ctx, sizeof(MD5_CTX));
+  MD5_Final(dataout->md5, &ctx);
 
   return sizeof(MD5Out_t);
 }
@@ -148,8 +144,9 @@ void bl_handleWriteCommand(ReadIn_t * info,  CPXPacket_t * rxp, CPXPacket_t * tx
 }
 
 #define MAX_NB_SEGMENT 16
-#define L2_BUFFER_SIZE 4096
+#define L2_BUFFER_SIZE 512
 
+static PI_L2 uint8_t l2_buffer[L2_BUFFER_SIZE]; 
 typedef struct {
   uint32_t offset;
   uint32_t base;
@@ -162,31 +159,30 @@ typedef struct {
   uint32_t nSegments;
   uint32_t entry;
   uint32_t entryBase;
-  bin_segment_t segments[MAX_NB_SEGMENT]
+  bin_segment_t segments[MAX_NB_SEGMENT];
 } bin_header_t;
 
 static void load_segment(const uint32_t application_offset, const bin_segment_t *segment)
-{
-    static PI_L2 uint8_t l2_buffer[L2_BUFFER_SIZE];
-    
+{ 
+
     bool isL2Section = segment->base >= 0x1C000000 && segment->base < 0x1D000000;
     
     if(isL2Section) {
         printf("Load segment to L2 memory at 0x%lX\n", segment->base);
         flash_read(application_offset + segment->offset, (void*) segment->base, segment->size);
-        //pi_flash_read(flash, partition_offset + segment->start, (void *) segment->ptr, segment->size);
     } else {
         printf("Load segment to FC TCDM memory at 0x%lX (using a L2 buffer)\n", segment->base);
         size_t remaining_size = segment->size;
-        uint32_t base = application_offset + segment->offset;
+        uint32_t flashBase = application_offset + segment->offset;
+        uint8_t * ramBase = (uint8_t *) segment->base;
         while (remaining_size > 0) {
             size_t iter_size = (remaining_size > L2_BUFFER_SIZE) ? L2_BUFFER_SIZE : remaining_size;
-            printf("Remaining size 0x%lX, it size %lu, base=0x%X\n", remaining_size, iter_size, base);
-            //pi_flash_read(flash, partition_offset + segment->start, l2_buffer, iter_size);
-            flash_read(base, l2_buffer, iter_size);
-            memcpy((void *) segment->base, (void *) l2_buffer, iter_size);
+            printf("Remaining size 0x%lX, it size %lu, 0x%X -> 0x%0X\n", remaining_size, iter_size, flashBase, ramBase);
+            flash_read(flashBase, l2_buffer, iter_size);
+            memcpy(ramBase, (void *) l2_buffer, iter_size);
             remaining_size -= iter_size;
-            base += iter_size;
+            flashBase += iter_size;
+            ramBase += iter_size;
         }
     }
 }
@@ -199,13 +195,12 @@ static inline void __attribute__((noreturn)) jump_to_address(unsigned int addres
 }
 
 #define VECTOR_TABLE_SIZE 0x94
+static bin_header_t header;
 
 void bl_boot_to_application(void) {
   printf("Booting to application in flash @ 0x%X\n", FIRMWARE_START_ADDRESS);
 
-  bin_header_t * header = (bin_header_t *) pi_l2_malloc(sizeof(bin_header_t));
-
-  flash_read(FIRMWARE_START_ADDRESS, header, sizeof(bin_header_t));
+  flash_read(FIRMWARE_START_ADDRESS, (uint8_t *) &header, sizeof(bin_header_t));
 
   // Binary size is header + segments until the partition table starts
   // Segments is number of things to load
@@ -225,18 +220,18 @@ void bl_boot_to_application(void) {
   static PI_L2 uint8_t buff[VECTOR_TABLE_SIZE];
   bool differ_copy_of_irq_table = false;
 
-  printf("Binary size: %u\n", header->size);
-  printf("Segments: %u\n", header->nSegments);
-  printf("Entrypoint: 0x%X\n", header->entry);
-  printf("Entrypoint base?: 0x%X\n", header->entryBase);
+  printf("Binary size: %u\n", header.size);
+  printf("Segments: %u\n", header.nSegments);
+  printf("Entrypoint: 0x%X\n", header.entry);
+  printf("Entrypoint base?: 0x%X\n", header.entryBase);
 
-  if (header->nSegments == 0 || header->nSegments > MAX_NB_SEGMENT) {
+  if (header.nSegments == 0 || header.nSegments > MAX_NB_SEGMENT) {
     printf("Binary header seems to be not ok, not trying to boot to application\n");
     return;
   }
 
-  for (int i=0; i < header->nSegments; i++) {
-    bin_segment_t * segment = &header->segments[i];
+  for (unsigned int i=0; i < header.nSegments; i++) {
+    bin_segment_t * segment = &header.segments[i];
     printf("[%u]: base=0x%X\toffset=0x%X\tsize=0x%X\tnBlocks=%u\n", 
       i,
       segment->base,
@@ -246,8 +241,8 @@ void bl_boot_to_application(void) {
   }
 
   // Start loading
-  for (int i=0; i < header->nSegments; i++) {
-    bin_segment_t * segment = &header->segments[i];
+  for (unsigned int i=0; i < header.nSegments; i++) {
+    bin_segment_t * segment = &header.segments[i];
 
     printf("Load segment %u: flash offset 0x%lX - size 0x%lX\n",
           i, segment->offset, segment->size);
@@ -286,8 +281,8 @@ void bl_boot_to_application(void) {
   SCBC_Type *icache = SCBC;
   icache->ICACHE_FLUSH = 1;
     
-  printf("Jump to app entry point at 0x%lX\n", header->entry);
-  jump_to_address(header->entry);
+  printf("Jump to app entry point at 0x%lX\n", header.entry);
+  jump_to_address(header.entry);
 
   // Read out ISR
 //static void load_segment(pi_device_t *flash, const uint32_t partition_offset, const bin_segment_t *segment)

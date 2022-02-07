@@ -30,20 +30,43 @@
 #include "pmsis.h"
 #include "cpx.h"
 
-static packet_t txp;
-static packet_t rxp;
+typedef struct
+{
+  uint16_t length; // Length data from cpxDst
+  uint8_t cpxDst : 4;
+  uint8_t cpxSrc : 4;
+  uint8_t cpxFunc;
+  uint8_t data[MTU - CPX_HEADER_SIZE];
+} __attribute__((packed)) spi_transport_with_routing_packet_t;
+
+static spi_transport_with_routing_packet_t txp;
+static spi_transport_with_routing_packet_t rxp;
 
 // Return length of packet
 uint32_t cpxReceivePacketBlocking(CPXPacket_t * packet) {
-  com_read(&rxp);
-  uint32_t size = rxp.len - sizeof(CPXRouting_t);
-  memcpy(&packet->route, rxp.data, rxp.len);
+  com_read((packet_t*) &rxp);
+  uint32_t size = rxp.length - sizeof(CPXRouting_t);
+
+  size = (uint32_t) rxp.length - CPX_HEADER_SIZE;
+  packet->route.destination = rxp.cpxDst;
+  packet->route.source = rxp.cpxSrc;
+  packet->route.function = rxp.cpxFunc;
+  memcpy(packet->data, rxp.data, size);
+
   return size;
 }
 
 void cpxSendPacketBlocking(CPXPacket_t * packet, uint32_t size) {
-  uint32_t wireLength = size + sizeof(CPXRouting_t);
-  txp.len = wireLength;
-  memcpy(txp.data, &packet->route, wireLength);
-  com_write(&txp);
+  /*ASSERT((packet->route.destination >> 4) == 0);
+  ASSERT((packet->route.source >> 4) == 0);
+  ASSERT((packet->route.function >> 8) == 0);
+  ASSERT(size <= MTU - CPX_HEADER_SIZE);*/
+
+  txp.length = (uint8_t) size + CPX_HEADER_SIZE;
+  txp.cpxDst = packet->route.destination;
+  txp.cpxSrc = packet->route.source;
+  txp.cpxFunc = packet->route.function;
+  memcpy(txp.data, &packet->data, size);
+
+  com_write((packet_t*) &txp);
 }

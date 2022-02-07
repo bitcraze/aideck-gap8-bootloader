@@ -11,8 +11,8 @@
 #     * Entrypoint where execution of the binary should start
 #     * Unknown (base address of entry point or interrupt vector location?)
 #   The following data is 4 integers per segment in the image (the number above in the header):
-#     * Base in flash: The offset in flash (from where the img is stored) where the segment data starts
-#     * Base in RAM: The offset in RAM where the data should be loaded
+#     * Offset in flash: The offset in flash (from where the img is stored) where the segment data starts
+#     * Offset in RAM: The offset in RAM where the data should be loaded
 #     * Size: The size of the segment (i.e size of data that should be copied into RAM from flash)
 #     * nBlocks: Number of blocks, not sure how this is used
 #
@@ -26,17 +26,20 @@
 
 import sys
 import struct
+import argparse
 
 startSBLInL2 = 0x1C060000
 startSBLInL1 = 0x1b002000
 
-if len(sys.argv) != 2:
-  print("usage: {} [flash-image]".format(sys.argv[0]))
-  sys.exit(1)
+parser = argparse.ArgumentParser(description='Show GAP8 firmware image header information')
+parser.add_argument('image', metavar='image', help='firmware image to analyze')
+args = parser.parse_args()
 
-print("Showing info for {}".format(sys.argv[1]))
+imageName = args.image
+
+print("Showing info for {}".format(imageName))
 fw = bytearray()
-with open(sys.argv[1], "rb") as f:
+with open(imageName, "rb") as f:
   fw.extend(f.read())
 
 [size, nSegments, entry, entryBase] = struct.unpack("IIII", fw[0:16])
@@ -60,7 +63,7 @@ segmentSBLOverlap = []
 i = 16
 for si in range(nSegments):
   [base, offset, size, nBlocks] = struct.unpack("IIII", fw[i:i+16])
-  info = "[{}]\tbase=0x{:X}\toffset=0x{:X}\tsize=0x{:X}\tnBlocks={}".format(
+  info = "[{}] Flash offset = 0x{:X}\tRAM offset = 0x{:X}\tsize = 0x{:X}\tnBlocks = {}".format(
     si, base, offset, size, nBlocks
   ) 
   print(info)
@@ -77,8 +80,8 @@ for si in range(nSegments):
   i += 16
 
 print("")
-print("Total L1 size: 0x{:X} ({})".format(totalL1, totalL1))
-print("Total L2 size: 0x{:X} ({})".format(totalL2, totalL2))
+print("L1 size to copy: 0x{:X} ({})".format(totalL1, totalL1))
+print("L2 size to copy: 0x{:X} ({})".format(totalL2, totalL2))
 print("")
 
 if len(segmentSBLOverlap) > 0:

@@ -62,28 +62,28 @@ void hb_task( void *parameters )
 }
 
 // These must be in L2 for uDMA to work
-static CPXPacket_t * txp;
-static CPXPacket_t * rxp;
+static CPXPacket_t txp;
+static CPXPacket_t rxp;
 
 extern void pi_bsp_init(void);
 
 void setup_wifi(void) {
   printf("Sending wifi info...\n");
-  txp->route.destination = ESP32;
-  txp->route.source = GAP8;
-  txp->route.function = WIFI_CTRL;
+  txp.route.destination = ESP32;
+  txp.route.source = GAP8;
+  txp.route.function = WIFI_CTRL;
 
-  WiFiCTRLPacket_t * wifiCtrl = (WiFiCTRLPacket_t*) txp->data;
+  WiFiCTRLPacket_t * wifiCtrl = (WiFiCTRLPacket_t*) txp.data;
   wifiCtrl->cmd = WIFI_CTRL_SET_SSID;
   memcpy(wifiCtrl->data, ssid, sizeof(ssid));
-  cpxSendPacketBlocking(txp, sizeof(ssid) + 1);
+  cpxSendPacketBlocking(&txp, sizeof(ssid) + 1);
 
   wifiCtrl->cmd = WIFI_CTRL_SET_KEY;
   memcpy(wifiCtrl->data, passwd, sizeof(passwd));
-  cpxSendPacketBlocking(txp, sizeof(passwd) + 1);
+  cpxSendPacketBlocking(&txp, sizeof(passwd) + 1);
 
   wifiCtrl->cmd = WIFI_CTRL_WIFI_CONNECT;
-  cpxSendPacketBlocking(txp, sizeof(WiFiCTRLPacket_t));
+  cpxSendPacketBlocking(&txp, sizeof(WiFiCTRLPacket_t));
 }
 
 void bl_task( void *parameters )
@@ -96,35 +96,38 @@ void bl_task( void *parameters )
   setup_wifi();
 
   while (1) {
-    uint32_t size = cpxReceivePacketBlocking(rxp);
+    uint32_t size = cpxReceivePacketBlocking(&rxp);
     
-    printf(">> 0x%02X->0x%02X (0x%02X) (size=%u)\n", rxp->route.source, rxp->route.destination, rxp->route.function, size);
-    if (rxp->route.function == BOOTLOADER) {
-      BLPacket_t * blpRx = (BLPacket_t*) rxp->data;
-      BLPacket_t * blpTx = (BLPacket_t*) txp->data;
+    printf(">> 0x%02X->0x%02X (0x%02X) (size=%u)\n", rxp.route.source, rxp.route.destination, rxp.route.function, size);
+    if (rxp.route.function == BOOTLOADER) {
+      BLPacket_t * blpRx = (BLPacket_t*) rxp.data;
+      BLPacket_t * blpTx = (BLPacket_t*) txp.data;
 
       printf("Received command [0x%02X] for bootloader\n", blpRx->cmd);
 
       uint16_t replySize = 0;
 
       // Fix the header of the outgoing answer
-      txp->route.source = GAP8;
-      txp->route.destination = rxp->route.source;
-      txp->route.function = BOOTLOADER;
+      txp.route.source = GAP8;
+      txp.route.destination = rxp.route.source;
+      txp.route.function = BOOTLOADER;
 
       switch(blpRx->cmd) {
         case BL_CMD_VERSION:
           replySize = bl_handleVersionCommand((VersionOut_t*) blpTx->data);
           break;
         case BL_CMD_READ:
-          bl_handleReadCommand( (ReadIn_t*) blpRx->data, txp);
+          bl_handleReadCommand( (ReadIn_t*) blpRx->data, &txp);
           break;
         case BL_CMD_WRITE:
-          bl_handleWriteCommand( (ReadIn_t*) blpRx->data, rxp, txp);
+          bl_handleWriteCommand( (ReadIn_t*) blpRx->data, &rxp, &txp);
           break;          
         case BL_CMD_MD5:
           replySize = bl_handleMD5Command((ReadIn_t*) blpRx->data, (MD5Out_t *) blpTx->data);
-          break;          
+          break;
+        case BL_CMD_JMP:
+          bl_boot_to_application();
+          break;  
         default:
           printf("Not handling bootloader command [0x%02X]\n", blpRx->cmd);
       }
@@ -134,18 +137,19 @@ void bl_task( void *parameters )
         blpTx->cmd = blpRx->cmd;
         replySize += sizeof(BLCommand_t);
 
+        printf("Sending back reply of %u bytes\n", replySize);
 
-        cpxSendPacketBlocking(txp, replySize);
+        cpxSendPacketBlocking(&txp, replySize);
       }
       
-    } else if (rxp->route.function == WIFI_CTRL) {
-      if (rxp->data[0] == WIFI_CTRL_STATUS_WIFI_CONNECTED) {
-        printf("Wifi connected (%u.%u.%u.%u)\n", rxp->data[1], rxp->data[2], rxp->data[3], rxp->data[4]);
+    } else if (rxp.route.function == WIFI_CTRL) {
+      if (rxp.data[0] == WIFI_CTRL_STATUS_WIFI_CONNECTED) {
+        printf("Wifi connected (%u.%u.%u.%u)\n", rxp.data[1], rxp.data[2], rxp.data[3], rxp.data[4]);
       } else {
-        printf("Not handling WIFI_CTRL [0x%02X]\n", rxp->data[0]);
+        printf("Not handling WIFI_CTRL [0x%02X]\n", rxp.data[0]);
       }
     } else {
-      printf("Not handling function [0x%02X]\n", rxp->route.function);
+      printf("Not handling function [0x%02X]\n", rxp.route.function);
     }
   }
 }
@@ -167,16 +171,6 @@ void start_bootloader(void)
     printf("FC at %u MHz\n", pi_freq_get(PI_FREQ_DOMAIN_FC)/1000000);
 
     flash_init();
-
-    // These must be in L2 for uDMA to work
-    txp = (CPXPacket_t *) pi_l2_malloc((uint32_t)sizeof(CPXPacket_t));
-    rxp = (CPXPacket_t *) pi_l2_malloc((uint32_t)sizeof(CPXPacket_t));
-
-    if (txp == NULL || rxp == NULL)
-    {
-      printf("Could not allocate txp and/or rxp, nothing to do now\n");
-      pmsis_exit(1);
-    }
 
     printf("Starting up tasks...\n");
 

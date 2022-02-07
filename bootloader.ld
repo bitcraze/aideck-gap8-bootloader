@@ -45,7 +45,7 @@ MEMORY
 }
 
 /* Here are defined stack sizes for FC and cluster. */
-__STACK_FC_SIZE      = 0x800;
+__STACK_FC_SIZE      = 0x900;
 __STACK_IRQ_SIZE     = 0x250;
 
 /* We have to align each sector to word boundaries as our current s19->slm

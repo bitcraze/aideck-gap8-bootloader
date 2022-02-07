@@ -64,17 +64,11 @@ void flash_init() {
 }
 
 void flash_write(uint32_t addr, uint8_t * in_data, unsigned int len) {
-  uint8_t * alignedData = (uint8_t *) pi_l2_malloc(len); 
-  memcpy(alignedData, in_data, len);
-  pi_flash_program(&flash_dev, addr, alignedData, len);
-  pi_l2_free(alignedData, len);
+  pi_flash_program(&flash_dev, addr, in_data, len);
 }
 
 void flash_read(uint32_t addr, uint8_t * out_data, unsigned int len) {
-  uint8_t * alignedData = (uint8_t *) pi_l2_malloc(len);
-  pi_flash_read(&flash_dev, addr, alignedData, len);
-  memcpy(out_data, alignedData, len);
-  pi_l2_free(alignedData, len);
+  pi_flash_read(&flash_dev, addr, out_data, len);
 }
 
 void flash_erase(uint32_t addr, unsigned int len) {

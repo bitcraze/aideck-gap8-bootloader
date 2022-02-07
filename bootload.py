@@ -32,6 +32,7 @@ import socket,os,struct, time
 import numpy as np
 import hashlib
 import binascii
+import sys
 
 
 # Args for setting IP/port of AI-deck. Default settings are for when
@@ -39,10 +40,12 @@ import binascii
 parser = argparse.ArgumentParser(description='Connect to AI-deck JPEG streamer example')
 parser.add_argument("-n",  default="192.168.4.1", metavar="ip", help="AI-deck IP")
 parser.add_argument("-p", type=int, default='5000', metavar="port", help="AI-deck port")
+parser.add_argument('image', metavar='image', help='firmware image to flash')
 args = parser.parse_args()
 
 deck_port = args.p
 deck_ip = args.n
+imageName = args.image
 
 print("Connecting to socket on {}:{}...".format(deck_ip, deck_port))
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -179,7 +182,12 @@ class GAP8Bootloader:
                                           function=CPXFunction.BOOTLOADER,
                                           data=struct.pack("<BII", 0x04, start, count)))
     return md5.data[1:]
-                  
+
+  def startApplication(self):
+    self._cpx.send(CPXPacket(destination=CPXTarget.GAP8,
+                            function=CPXFunction.BOOTLOADER,
+                            data=struct.pack("<B", 0x06)))
+
   def writeFlash(self, start, data):
     cmd = struct.pack("<BII", 0x02, start, len(data))
     cmdPacket = CPXPacket(destination=CPXTarget.GAP8, function=CPXFunction.BOOTLOADER, data=cmd)
@@ -215,19 +223,14 @@ def hex_hump(arr, start=None):
 cpx = CPX(client_socket)
 bootloader = GAP8Bootloader(cpx)
 
-#version = cpx.transaction(CPXPacket(destination=CPXTarget.GAP8,
-#                                    function=CPXFunction.BOOTLOADER,
-#                                    data=bytearray([0x00])))
-
 version = bootloader.getVersion()
 
 print("GAP8 bootloader is version 0x{:02X}".format(version[0]))
 
 flashAppStart = 0x40000
-size = 16
 
 fw = bytearray()
-with open("flash.img", "rb") as f:
+with open(imageName, "rb") as f:
   fw.extend(f.read())
 
 print("Firmware is {} bytes".format(len(fw)))
@@ -240,5 +243,6 @@ print(binascii.hexlify(gap8CalcMD5))
 
 if gap8CalcMD5 == fwMD5.digest():
   print("Flash OK: Firmware MD5 matches!")
+  bootloader.startApplication()
 else:
   print("Flash FAIL: Firmware MD5 does NOT match!")
