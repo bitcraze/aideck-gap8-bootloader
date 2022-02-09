@@ -33,6 +33,12 @@
 #include "bl.h"
 #include "cpx.h"
 
+#if 0
+#define DEBUG_PRINTF printf
+#else
+#define DEBUG_PRINTF(...) ((void) 0)
+#endif /* DEBUG */
+
 #define SIZE_OF_MD5_BUFER (512)
 
 #define FIRMWARE_START_ADDRESS (0x40000)
@@ -52,7 +58,7 @@ void bl_handleReadCommand(ReadIn_t * info,  CPXPacket_t * txp) {
   currentBaseAddress = info->start;
   chunkSize = 0;
 
-  printf("Size left = %u, currentBase=0x%X\n", sizeLeft, currentBaseAddress);
+  DEBUG_PRINTF("Size left = %u, currentBase=0x%X\n", sizeLeft, currentBaseAddress);
   do {
     chunkSize = sizeLeft < sizeof(txp->data) ? sizeLeft : sizeof(txp->data);
     //printf("Reading chunk of %u\n", chunkSize);
@@ -69,7 +75,7 @@ void bl_handleReadCommand(ReadIn_t * info,  CPXPacket_t * txp) {
     sizeLeft -= chunkSize;
     //printf("Size left = %u, currentBase=0x%X\n", sizeLeft, currentBaseAddress);
   } while (sizeLeft > 0);
-  printf("Read completed\n");
+  DEBUG_PRINTF("Read completed\n");
 }
 
 static uint8_t buffer[SIZE_OF_MD5_BUFER];
@@ -86,11 +92,10 @@ uint32_t bl_handleMD5Command(ReadIn_t * info, MD5Out_t * dataout) {
   currentBaseAddress = info->start;
   chunkSize = 0;
 
-  //printf("Calculating MD5 for %u bytes @ 0x%X\n", sizeLeft, currentBaseAddress);
+  DEBUG_PRINTF("Calculating MD5 for %u bytes @ 0x%X\n", sizeLeft, currentBaseAddress);
 
   do {
     chunkSize = sizeLeft < SIZE_OF_MD5_BUFER ? sizeLeft : SIZE_OF_MD5_BUFER;
-    //printf("Inputting %u bytes @ 0x%X\n", chunkSize, currentBaseAddress);
     flash_read(currentBaseAddress, buffer, chunkSize);
     MD5_Update(&ctx, buffer, chunkSize);    
     currentBaseAddress += chunkSize;
@@ -118,29 +123,27 @@ void bl_handleWriteCommand(ReadIn_t * info,  CPXPacket_t * rxp, CPXPacket_t * tx
   chunkSize = 0;
 
   // Sanity check data
-  printf("Erasing flash from 0x%X to 0x%X...\n", currentBaseAddress, currentBaseAddress + sizeLeft);
+  DEBUG_PRINTF("Erasing flash from 0x%X to 0x%X...\n", currentBaseAddress, currentBaseAddress + sizeLeft);
   flash_erase(currentBaseAddress, sizeLeft);
-  printf("done!\n");
+  DEBUG_PRINTF("done!\n");
 
-  printf("Start update of size %ub @ 0x%X\n", sizeLeft, currentBaseAddress);
+  DEBUG_PRINTF("Start update of size %ub @ 0x%X\n", sizeLeft, currentBaseAddress);
   do {
     // Read the next data packet
-    printf("Waiting for packet...\n");
     uint32_t size = cpxReceivePacketBlocking(rxp);
-    printf("got it!\n");
     if (rxp->route.function == BOOTLOADER) {
-      printf("Writing chunk of %u@0x%X...\n", size, currentBaseAddress);
+      DEBUG_PRINTF("Writing chunk of %u@0x%X...\n", size, currentBaseAddress);
       flash_write(currentBaseAddress, rxp->data, size);
-      printf("done!\n");
+      DEBUG_PRINTF("done!\n");
 
       currentBaseAddress += size;
       sizeLeft -= size;
-      printf("Size left = %u, currentBase=0x%X\n", sizeLeft, currentBaseAddress);
+      DEBUG_PRINTF("Size left = %u, currentBase=0x%X\n", sizeLeft, currentBaseAddress);
     } else {
-      printf("We got a packet not for the bootloader while writing\n");
+      DEBUG_PRINTF("We got a packet not for the bootloader while writing\n");
     }
   } while (sizeLeft > 0);
-  printf("Write completed\n");
+  DEBUG_PRINTF("Write completed\n");
 }
 
 #define MAX_NB_SEGMENT 16
@@ -168,16 +171,16 @@ static void load_segment(const uint32_t application_offset, const bin_segment_t 
     bool isL2Section = segment->base >= 0x1C000000 && segment->base < 0x1D000000;
     
     if(isL2Section) {
-        printf("Load segment to L2 memory at 0x%lX\n", segment->base);
+        DEBUG_PRINTF("Load segment to L2 memory at 0x%lX\n", segment->base);
         flash_read(application_offset + segment->offset, (void*) segment->base, segment->size);
     } else {
-        printf("Load segment to FC TCDM memory at 0x%lX (using a L2 buffer)\n", segment->base);
+        DEBUG_PRINTF("Load segment to FC TCDM memory at 0x%lX (using a L2 buffer)\n", segment->base);
         size_t remaining_size = segment->size;
         uint32_t flashBase = application_offset + segment->offset;
         uint8_t * ramBase = (uint8_t *) segment->base;
         while (remaining_size > 0) {
             size_t iter_size = (remaining_size > L2_BUFFER_SIZE) ? L2_BUFFER_SIZE : remaining_size;
-            printf("Remaining size 0x%lX, it size %lu, 0x%X -> 0x%0X\n", remaining_size, iter_size, flashBase, ramBase);
+            DEBUG_PRINTF("Remaining size 0x%lX, it size %lu, 0x%X -> 0x%0X\n", remaining_size, iter_size, flashBase, ramBase);
             flash_read(flashBase, l2_buffer, iter_size);
             memcpy(ramBase, (void *) l2_buffer, iter_size);
             remaining_size -= iter_size;
@@ -198,7 +201,7 @@ static inline void __attribute__((noreturn)) jump_to_address(unsigned int addres
 static bin_header_t header;
 
 void bl_boot_to_application(void) {
-  printf("Booting to application in flash @ 0x%X\n", FIRMWARE_START_ADDRESS);
+  DEBUG_PRINTF("Booting to application in flash @ 0x%X\n", FIRMWARE_START_ADDRESS);
 
   flash_read(FIRMWARE_START_ADDRESS, (uint8_t *) &header, sizeof(bin_header_t));
 
@@ -220,19 +223,19 @@ void bl_boot_to_application(void) {
   static PI_L2 uint8_t buff[VECTOR_TABLE_SIZE];
   bool differ_copy_of_irq_table = false;
 
-  printf("Binary size: %u\n", header.size);
-  printf("Segments: %u\n", header.nSegments);
-  printf("Entrypoint: 0x%X\n", header.entry);
-  printf("Entrypoint base?: 0x%X\n", header.entryBase);
+  DEBUG_PRINTF("Binary size: %u\n", header.size);
+  DEBUG_PRINTF("Segments: %u\n", header.nSegments);
+  DEBUG_PRINTF("Entrypoint: 0x%X\n", header.entry);
+  DEBUG_PRINTF("Entrypoint base?: 0x%X\n", header.entryBase);
 
   if (header.nSegments == 0 || header.nSegments > MAX_NB_SEGMENT) {
-    printf("Binary header seems to be not ok, not trying to boot to application\n");
+    DEBUG_PRINTF("Binary header seems to be not ok, not trying to boot to application\n");
     return;
   }
 
   for (unsigned int i=0; i < header.nSegments; i++) {
     bin_segment_t * segment = &header.segments[i];
-    printf("[%u]: base=0x%X\toffset=0x%X\tsize=0x%X\tnBlocks=%u\n", 
+    DEBUG_PRINTF("[%u]: base=0x%X\toffset=0x%X\tsize=0x%X\tnBlocks=%u\n", 
       i,
       segment->base,
       segment->offset,
@@ -244,14 +247,12 @@ void bl_boot_to_application(void) {
   for (unsigned int i=0; i < header.nSegments; i++) {
     bin_segment_t * segment = &header.segments[i];
 
-    printf("Load segment %u: flash offset 0x%lX - size 0x%lX\n",
+    DEBUG_PRINTF("Load segment %u: flash offset 0x%lX - size 0x%lX\n",
           i, segment->offset, segment->size);
 
     // Skip interrupt table entries
     if(segment->base == 0x1C000000) {
       differ_copy_of_irq_table = true;
-      printf("Differ the copy of irq table\n");
-      //pi_flash_read(flash, partition_offset + seg->start, (void *) buff, 0x94);
       flash_read(FIRMWARE_START_ADDRESS + segment->offset, (uint8_t*) buff, VECTOR_TABLE_SIZE);
       segment->base += VECTOR_TABLE_SIZE;
       segment->offset += VECTOR_TABLE_SIZE;
@@ -263,13 +264,13 @@ void bl_boot_to_application(void) {
 
   //pi_flash_close(flash);
     
-  printf("Disable global IRQ and timer interrupt\n");
+  DEBUG_PRINTF("Disable global IRQ and timer interrupt\n");
   disable_irq();
   NVIC_DisableIRQ(SYSTICK_IRQN);
    
   if(differ_copy_of_irq_table)
   {
-    printf("Copy IRQ table whithout uDMA.\n");
+    DEBUG_PRINTF("Copy IRQ table whithout uDMA.\n");
     uint8_t *ptr = (uint8_t * ) 0x1C000000;
     for (size_t i = 0; i < VECTOR_TABLE_SIZE; i++)
     {
@@ -277,15 +278,10 @@ void bl_boot_to_application(void) {
     }
   }
     
-  printf("Flush icache\n");
+  DEBUG_PRINTF("Flush icache\n");
   SCBC_Type *icache = SCBC;
   icache->ICACHE_FLUSH = 1;
     
   printf("Jump to app entry point at 0x%lX\n", header.entry);
   jump_to_address(header.entry);
-
-  // Read out ISR
-//static void load_segment(pi_device_t *flash, const uint32_t partition_offset, const bin_segment_t *segment)
-//gapy -v --target ai_deck elf2bin BUILD/GAP8_V2/GCC_RISCV_FREERTOS/bootloader
-//gapy -v --target ai_deck gen_flash_image --flash-type hyper --boot-loader BUILD/GAP8_V2/GCC_RISCV_FREERTOS/bootloader -o out.img
 }
