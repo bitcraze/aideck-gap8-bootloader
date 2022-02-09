@@ -52,15 +52,6 @@ void flash_init() {
   open_flash(&flash_dev);
 
   pi_flash_ioctl(&flash_dev, PI_FLASH_IOCTL_INFO, (void *)&flash_info);
-
-  flash_start = ((flash_info.flash_start + flash_info.sector_size - 1) &
-                ~(flash_info.sector_size - 1)) +
-               128;
-
-  printf("Flash start on: 0x%X\n", flash_info.flash_start);
-  printf("Flash start on: 0x%X\n", flash_start);
-  printf("Sector size is: 0x%X\n", flash_info.sector_size);
-
 }
 
 void flash_write(uint32_t addr, uint8_t * in_data, unsigned int len) {
