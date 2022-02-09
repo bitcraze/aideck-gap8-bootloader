@@ -233,6 +233,15 @@ void com_task(void *parameters)
         sizeLeft += (4-sizeLeft%4); // Pad upwards
       }
 
+      // Protect against the case where the ESP might signal
+      // on the RTT line that it wants to send, but actually has
+      // no length. Calling the SPI transfer function with size = 0
+      // will corrupt the following transaction. Sending random data
+      // is ok, since the length is set to 0 and the ESP will ignore it.
+      if (sizeLeft == 0) {
+        sizeLeft = 4;
+      }
+
       DEBUG_PRINTF("Sending %i bytes\n", sizeLeft);
 
       // Set GAP8 RTT low before we end the transfer
