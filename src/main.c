@@ -83,7 +83,8 @@ void setup_wifi(void) {
   cpxSendPacketBlocking(&txp, sizeof(passwd) + 1);
 
   wifiCtrl->cmd = WIFI_CTRL_WIFI_CONNECT;
-  cpxSendPacketBlocking(&txp, sizeof(WiFiCTRLPacket_t));
+  wifiCtrl->data[0] = 0; // Connect to wifi, no soft-ap
+  cpxSendPacketBlocking(&txp, 2);
 }
 
 void bl_task( void *parameters )
