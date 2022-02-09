@@ -35,9 +35,19 @@
 #include "bl.h"
 #include "flash.h"
 
+// This is used during initial development and should be removed
+#define SETUP_WIFI_FROM_GAP
+
+#ifdef SETUP_WIFI_FROM_GAP
 #include "wifi.h"
 #include "wifi_credentials.h"
+#endif
 
+#if 0
+#define DEBUG_PRINTF printf
+#else
+#define DEBUG_PRINTF(...) ((void) 0)
+#endif /* DEBUG */
 
 #define LED_PIN 2
 
@@ -67,8 +77,9 @@ static CPXPacket_t rxp;
 
 extern void pi_bsp_init(void);
 
+#ifdef SETUP_WIFI_FROM_GAP
 void setup_wifi(void) {
-  printf("Sending wifi info...\n");
+  printf("Setting up wifi...\n");
   txp.route.destination = ESP32;
   txp.route.source = GAP8;
   txp.route.function = WIFI_CTRL;
@@ -86,6 +97,7 @@ void setup_wifi(void) {
   wifiCtrl->data[0] = 0; // Connect to wifi, no soft-ap
   cpxSendPacketBlocking(&txp, 2);
 }
+#endif
 
 void bl_task( void *parameters )
 {
@@ -94,17 +106,19 @@ void bl_task( void *parameters )
 
   vTaskDelay(1000);
 
+#ifdef SETUP_WIFI_FROM_GAP
   setup_wifi();
+#endif
 
   while (1) {
     uint32_t size = cpxReceivePacketBlocking(&rxp);
     
-    printf(">> 0x%02X->0x%02X (0x%02X) (size=%u)\n", rxp.route.source, rxp.route.destination, rxp.route.function, size);
+    DEBUG_PRINTF(">> 0x%02X->0x%02X (0x%02X) (size=%u)\n", rxp.route.source, rxp.route.destination, rxp.route.function, size);
     if (rxp.route.function == BOOTLOADER) {
       BLPacket_t * blpRx = (BLPacket_t*) rxp.data;
       BLPacket_t * blpTx = (BLPacket_t*) txp.data;
 
-      printf("Received command [0x%02X] for bootloader\n", blpRx->cmd);
+      DEBUG_PRINTF("Received command [0x%02X] for bootloader\n", blpRx->cmd);
 
       uint16_t replySize = 0;
 
@@ -138,20 +152,22 @@ void bl_task( void *parameters )
         blpTx->cmd = blpRx->cmd;
         replySize += sizeof(BLCommand_t);
 
-        printf("Sending back reply of %u bytes\n", replySize);
+        DEBUG_PRINTF("Sending back reply of %u bytes\n", replySize);
 
         cpxSendPacketBlocking(&txp, replySize);
       }
       
-    } else if (rxp.route.function == WIFI_CTRL) {
+    }
+
+#ifdef SETUP_WIFI_FROM_GAP    
+    if (rxp.route.function == WIFI_CTRL) {
       if (rxp.data[0] == WIFI_CTRL_STATUS_WIFI_CONNECTED) {
         printf("Wifi connected (%u.%u.%u.%u)\n", rxp.data[1], rxp.data[2], rxp.data[3], rxp.data[4]);
       } else {
         printf("Not handling WIFI_CTRL [0x%02X]\n", rxp.data[0]);
       }
-    } else {
-      printf("Not handling function [0x%02X]\n", rxp.route.function);
     }
+#endif  
   }
 }
 
