@@ -33,8 +33,10 @@
 typedef struct
 {
   uint16_t length; // Length data from cpxDst
-  uint8_t cpxDst : 4;
-  uint8_t cpxSrc : 4;
+  uint8_t cpxDst : 3;
+  uint8_t cpxSrc : 3;
+  bool lastPacket : 1;
+  bool reserved : 1;
   uint8_t cpxFunc;
   uint8_t data[MTU - CPX_HEADER_SIZE];
 } __attribute__((packed)) spi_transport_with_routing_packet_t;
