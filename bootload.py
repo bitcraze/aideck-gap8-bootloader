@@ -96,22 +96,26 @@ class CPXPacket(object):
         self.function = function
         self._wireHeaderFormat = "<HBB"
         self.length = 0
+        self.lastPacket = False
         if wireHeader:
-            [self.length, targets, self.function] = struct.unpack(self._wireHeaderFormat, wireHeader)
-            self.destination = targets >> 4
-            self.source = targets & 0x0F
+            [self.length, targetsAndFlags, self.function] = struct.unpack(self._wireHeaderFormat, wireHeader)
+            self.destination = (targetsAndFlags >> 3) & 0x07
+            self.source = targetsAndFlags & 0x07
+            self.lastPacket = targetsAndFlags & 0x40 != 0
 
     def _get_wire_data(self):
         """Create raw data to send via the wire"""
         raw = bytearray()
         # This is the length excluding the 2 byte legnth
         wireLength = len(self.data) + 2 # 2 bytes for CPX header
-        targets = ((self.source & 0xF) << 4) | (self.destination & 0xF)
+        targetsAndFlags = ((self.source & 0x7) << 3) | (self.destination & 0x7)
+        if self.lastPacket:
+          targetsAndFlags |= 0x40
         #print(self.destination)
         #print(self.source)
         #print(targets)
         function = self.function & 0xFF
-        raw.extend(struct.pack(self._wireHeaderFormat, wireLength, targets, function))
+        raw.extend(struct.pack(self._wireHeaderFormat, wireLength, targetsAndFlags, function))
         raw.extend(self.data)
         
         # We need to handle this better...
