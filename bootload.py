@@ -209,6 +209,16 @@ class GAP8Bootloader:
       self._cpx.send(fwWritePacket)
       totalBytesWritten += nextChunk
 
+class ESP32System:
+  def __init__(self, cpx):
+    self._cpx = cpx
+
+  def resetGAP8(self):
+    reset = self._cpx.transaction(CPXPacket(destination=CPXTarget.ESP32,
+                                            function=CPXFunction.SYSTEM,
+                                            data=bytearray([0x10])))
+    # No need to return anything, we just want to wait
+
 def hex_hump(arr, start=None):
   i = 0
   if (start != None):
@@ -226,6 +236,9 @@ def hex_hump(arr, start=None):
 
 cpx = CPX(client_socket)
 bootloader = GAP8Bootloader(cpx)
+system = ESP32System(cpx)
+
+system.resetGAP8()
 
 version = bootloader.getVersion()
 
