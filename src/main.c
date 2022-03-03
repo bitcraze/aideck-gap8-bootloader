@@ -35,15 +35,7 @@
 #include "bl.h"
 #include "flash.h"
 
-// This is used during initial development and should be removed
-#define SETUP_WIFI_FROM_GAP
-
-#ifdef SETUP_WIFI_FROM_GAP
-#include "wifi.h"
-#include "wifi_credentials.h"
-#endif
-
-#if 0
+#if 1
 #define DEBUG_PRINTF printf
 #else
 #define DEBUG_PRINTF(...) ((void) 0)
@@ -77,38 +69,12 @@ static CPXPacket_t rxp;
 
 extern void pi_bsp_init(void);
 
-#ifdef SETUP_WIFI_FROM_GAP
-void setup_wifi(void) {
-  printf("Setting up wifi...\n");
-  txp.route.destination = ESP32;
-  txp.route.source = GAP8;
-  txp.route.function = WIFI_CTRL;
-
-  WiFiCTRLPacket_t * wifiCtrl = (WiFiCTRLPacket_t*) txp.data;
-  wifiCtrl->cmd = WIFI_CTRL_SET_SSID;
-  memcpy(wifiCtrl->data, ssid, sizeof(ssid));
-  cpxSendPacketBlocking(&txp, sizeof(ssid) + 1);
-
-  wifiCtrl->cmd = WIFI_CTRL_SET_KEY;
-  memcpy(wifiCtrl->data, passwd, sizeof(passwd));
-  cpxSendPacketBlocking(&txp, sizeof(passwd) + 1);
-
-  wifiCtrl->cmd = WIFI_CTRL_WIFI_CONNECT;
-  wifiCtrl->data[0] = 0; // Connect to wifi, no soft-ap
-  cpxSendPacketBlocking(&txp, 2);
-}
-#endif
-
 void bl_task( void *parameters )
 {
   uint8_t len;
   uint8_t count;
 
   vTaskDelay(1000);
-
-#ifdef SETUP_WIFI_FROM_GAP
-  setup_wifi();
-#endif
 
   while (1) {
     uint32_t size = cpxReceivePacketBlocking(&rxp);
@@ -158,16 +124,6 @@ void bl_task( void *parameters )
       }
       
     }
-
-#ifdef SETUP_WIFI_FROM_GAP    
-    if (rxp.route.function == WIFI_CTRL) {
-      if (rxp.data[0] == WIFI_CTRL_STATUS_WIFI_CONNECTED) {
-        printf("Wifi connected (%u.%u.%u.%u)\n", rxp.data[1], rxp.data[2], rxp.data[3], rxp.data[4]);
-      } else {
-        printf("Not handling WIFI_CTRL [0x%02X]\n", rxp.data[0]);
-      }
-    }
-#endif  
   }
 }
 
