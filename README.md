@@ -1,8 +1,5 @@
 # GAP8 second stage bootloader and updater
 
-**NOTE**: This is still under heavy development and lots of things might change
-before it's considered stable.
-
 ## About
 
 This bootloader has two main functions:
@@ -22,7 +19,11 @@ Basically you're "remote" flashing the same image you would flash via JTAG after
 
 ### Memory and flash structure
 
-TODO
+The GAP8 does not execute from flash, instead it will load executable code and data
+from flash into RAM at startup. For this reason the bootloader is linked to be placed
+high up in the L1/L2 to not collide with the user application. This does however effect
+the amount of L1/L2 the user application can use that contains pre-defined data (i.e
+placing the heap here is fine).
 
 ### Firmware binary structure
 
@@ -31,7 +32,13 @@ information about what segments should be loaded into RAM and where to start exe
 
 ### Communication
 
-TODO
+The bootloader uses CPX for communication where the following commands are available:
+
+* Version of the bootloader
+* Read from HyperFlash
+* Write to HyperFlash
+* Calculate MD5 checksum of area in flash
+* Jump to an application address and start executing
 
 ## Utilities
 
@@ -44,7 +51,7 @@ to already be connected to the WiFi.
 $ python3 bootload.py -h
 usage: bootload.py [-h] [-n ip] [-p port] image
 
-Connect to AI-deck JPEG streamer example
+Bootload the GAP8 on the AI-deck
 
 positional arguments:
   image       firmware image to flash
