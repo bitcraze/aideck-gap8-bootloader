@@ -9,8 +9,6 @@
 #
 #  Copyright (C) 2022 Bitcraze AB
 #
-#  AI-deck demo
-#
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
 #  as published by the Free Software Foundation; either version 2
@@ -37,7 +35,7 @@ import sys
 
 # Args for setting IP/port of AI-deck. Default settings are for when
 # AI-deck is in AP mode.
-parser = argparse.ArgumentParser(description='Connect to AI-deck JPEG streamer example')
+parser = argparse.ArgumentParser(description='Bootload the GAP8 on the AI-deck')
 parser.add_argument("-n",  default="192.168.4.1", metavar="ip", help="AI-deck IP")
 parser.add_argument("-p", type=int, default='5000', metavar="port", help="AI-deck port")
 parser.add_argument('image', metavar='image', help='firmware image to flash')
