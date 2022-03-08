@@ -151,8 +151,15 @@ static uint8_t tx_buff[sizeof(packet_t)];
 void com_task(void *parameters)
 {
   EventBits_t evBits;
-  
+  uint32_t startupESPRTTValue;
+
   DEBUG_PRINTF("Starting com task\n");
+
+  pi_gpio_pin_read(&nina_rtt_dev, CONFIG_NINA_GPIO_NINA_ACK, &startupESPRTTValue);
+
+  if (startupESPRTTValue > 0) {
+    xEventGroupSetBits(evGroup, NINA_RTT_BIT);
+  }
 
   while (1)
   {
