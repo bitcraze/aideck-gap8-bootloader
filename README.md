@@ -15,6 +15,17 @@ The bootloader gives full access to the flash (except for the part where the boo
 is located), which means it's possible to update both application and partition tables.
 Basically you're "remote" flashing the same image you would flash via JTAG after building.
 
+## Building
+
+Because of bugs in the GAP8 SDK you will need to use our docker container
+for building the bootloader. Building and flashing is done with the following
+command:
+
+```text
+docker pull bitcraze/aideck:4.8.0
+docker run --rm -it -v $PWD:/module/data/ --device /dev/ttyUSB0 --privileged -P bitcraze/aideck:4.8.0 /bin/bash -c 'export GAPY_OPENOCD_CABLE=interface/ftdi/olimex-arm-usb-tiny-h.cfg; source /gap_sdk
+```
+
 ## Design details
 
 ### Memory and flash structure
