@@ -35,7 +35,7 @@
 #include "bl.h"
 #include "flash.h"
 
-#if 1
+#if 0
 #define DEBUG_PRINTF printf
 #else
 #define DEBUG_PRINTF(...) ((void) 0)
@@ -140,12 +140,9 @@ void start_bootloader(void)
     pmsis_exit(-1);
   }
 
-    printf("\nBootloader is starting up...\n");
-    printf("FC at %u MHz\n", pi_freq_get(PI_FREQ_DOMAIN_FC)/1000000);
+    printf("\n-- GAP8 bootloader --\n");
 
     flash_init();
-
-    printf("Starting up tasks...\n");
 
     BaseType_t xTask;
 
