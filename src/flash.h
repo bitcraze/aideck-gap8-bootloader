@@ -39,6 +39,6 @@ void flash_write(uint32_t addr, uint8_t * in_data, unsigned int len);
 
 void flash_read(uint32_t addr, uint8_t * out_data, unsigned int len);
 
-void flash_erase(uint32_t addr, unsigned int len);
+void flash_erase_sector(uint32_t addr);
 
 #endif

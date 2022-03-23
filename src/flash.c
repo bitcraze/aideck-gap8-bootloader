@@ -62,6 +62,6 @@ void flash_read(uint32_t addr, uint8_t * out_data, unsigned int len) {
   pi_flash_read(&flash_dev, addr, out_data, len);
 }
 
-void flash_erase(uint32_t addr, unsigned int len) {
-  pi_flash_erase(&flash_dev, addr, len);
+void flash_erase_sector(uint32_t addr) {
+  pi_flash_erase_sector(&flash_dev, addr);
 }

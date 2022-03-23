@@ -41,7 +41,8 @@
 
 #define SIZE_OF_MD5_BUFER (512)
 
-#define FIRMWARE_START_ADDRESS (0x40000)
+#define PAGE_SIZE (0x40000)
+#define FIRMWARE_START_ADDRESS (PAGE_SIZE * 1)
 
 uint16_t bl_handleVersionCommand(VersionOut_t * out) {
   out->version = 1;
@@ -111,9 +112,6 @@ void bl_handleWriteCommand(ReadIn_t * info,  CPXPacket_t * rxp, CPXPacket_t * tx
 
   // Sanity check data and return something
 
-  // Read out and flash all the data
-  // TODO: Auto-erase at boundry
-
   uint32_t sizeLeft;
   uint32_t currentBaseAddress;
   uint32_t chunkSize;
@@ -122,16 +120,25 @@ void bl_handleWriteCommand(ReadIn_t * info,  CPXPacket_t * rxp, CPXPacket_t * tx
   currentBaseAddress = info->start;
   chunkSize = 0;
 
-  // Sanity check data
-  DEBUG_PRINTF("Erasing flash from 0x%X to 0x%X...\n", currentBaseAddress, currentBaseAddress + sizeLeft);
-  flash_erase(currentBaseAddress, sizeLeft);
-  DEBUG_PRINTF("done!\n");
-
   DEBUG_PRINTF("Start update of size %ub @ 0x%X\n", sizeLeft, currentBaseAddress);
   do {
     // Read the next data packet
     uint32_t size = cpxReceivePacketBlocking(rxp);
     if (rxp->route.function == BOOTLOADER) {
+
+      uint32_t bytesToPageBoundary = PAGE_SIZE - currentBaseAddress % PAGE_SIZE;
+
+      if (currentBaseAddress % PAGE_SIZE == 0) {
+        DEBUG_PRINTF("Erasing flash page @ 0x%X...\n", currentBaseAddress);
+        flash_erase_sector(currentBaseAddress);
+        DEBUG_PRINTF("done!\n");
+      } else if (bytesToPageBoundary < size) {
+        uint32_t nextPageAddress = currentBaseAddress + bytesToPageBoundary;
+        DEBUG_PRINTF("Erasing flash page @ 0x%X...\n", nextPageAddress);
+        flash_erase_sector(nextPageAddress);
+        DEBUG_PRINTF("done!\n");
+      }
+
       DEBUG_PRINTF("Writing chunk of %u@0x%X...\n", size, currentBaseAddress);
       flash_write(currentBaseAddress, rxp->data, size);
       DEBUG_PRINTF("done!\n");
