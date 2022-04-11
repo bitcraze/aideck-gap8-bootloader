@@ -51,6 +51,11 @@ typedef enum {
   BOOTLOADER = 0x0F,
 } CPXFunction_t;
 
+typedef enum {
+  LOG_TO_WIFI = HOST,
+  LOG_TO_CRTP = STM32
+} CPXConsoleTarget_t;
+
 typedef struct {
   CPXTarget_t destination;
   CPXTarget_t source;
@@ -66,3 +71,5 @@ typedef struct {
 uint32_t cpxReceivePacketBlocking(CPXPacket_t * packet);
 
 void cpxSendPacketBlocking(CPXPacket_t * packet, uint32_t size);
+
+void cpxPrintToConsole(CPXConsoleTarget_t target, const char * fmt, ...);

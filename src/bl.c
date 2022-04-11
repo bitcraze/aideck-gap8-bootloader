@@ -236,7 +236,7 @@ void bl_boot_to_application(void) {
   DEBUG_PRINTF("Entrypoint base?: 0x%X\n", header.entryBase);
 
   if (header.nSegments == 0 || header.nSegments > MAX_NB_SEGMENT) {
-    printf("Binary header seems not ok, not jumping to application\n");
+    cpxPrintToConsole(LOG_TO_CRTP, "Binary application header doesn't seem ok, not exiting bootloader\n");
     return;
   }
 
