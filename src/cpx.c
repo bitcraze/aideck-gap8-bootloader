@@ -80,7 +80,7 @@ void cpxSendPacketBlocking(CPXPacket_t * packet, uint32_t size) {
   ASSERT((packet->route.function >> 8) == 0);
   ASSERT(size <= MTU - CPX_HEADER_SIZE);*/
 
-  txp.length = (uint8_t) size + CPX_HEADER_SIZE;
+  txp.length = (uint16_t) size + CPX_HEADER_SIZE;
   txp.cpxDst = packet->route.destination;
   txp.cpxSrc = packet->route.source;
   txp.cpxFunc = packet->route.function;
