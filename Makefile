@@ -13,9 +13,9 @@ APP_CFLAGS += -DconfigUSE_TIMERS=1 -DINCLUDE_xTimerPendFunctionCall=1 -DCONFIG_N
 APP_LINK_SCRIPT=bootloader.ld
 
 # Add BSP support files
-BSP_SUPPORT = fs/host_fs/semihost.c fs/host_fs/host_fs.c
+# BSP_SUPPORT = fs/host_fs/semihost.c fs/host_fs/host_fs.c
 #BSP_SUPPORT = fs/host_fs/host_fs.c fs/host_fs/semihost.c
-PMSIS_BSP_SRC=$(BSP_SUPPORT)
+# PMSIS_BSP_SRC=$(BSP_SUPPORT)
 
 # In order to fit in L1 space for the bootloader we need to limit the space in L1 the
 # FreeRTOS idle task stack takes. The only way to do this is to override the settings
