@@ -22,8 +22,8 @@ for building the bootloader. Building and flashing is done with the following
 command:
 
 ```text
-docker pull bitcraze/aideck:4.8.0.1
-docker run --rm -it -v $PWD:/module/ --device /dev/ttyUSB0 --privileged -P bitcraze/aideck:4.8.0.1 /bin/bash -c 'export GAPY_OPENOCD_CABLE=interface/ftdi/olimex-arm-usb-tiny-h.cfg; source /gap_sdk/configs/ai_deck.sh; cd /module/;  make clean all image flash'
+docker pull bitcraze/aideck
+docker run --rm -it -v $PWD:/module/ --device /dev/ttyUSB0 --privileged -P bitcraze/aideck /bin/bash -c 'export GAPY_OPENOCD_CABLE=interface/ftdi/olimex-arm-usb-tiny-h.cfg; source /gap_sdk/configs/ai_deck.sh; cd /module/;  make clean all image flash'
 
 ```
 
